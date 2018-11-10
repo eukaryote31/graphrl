@@ -6,9 +6,7 @@ setup(
     version='0.0.1',
     packages=find_packages(exclude=['contrib', 'docs', 'tests']),
     setup_requires=[
-        'pytest-runner',
-        'coveralls',
-        'coverage'
+        'pytest-runner'
     ],
     install_requires=[
         'bitarray',

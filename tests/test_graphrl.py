@@ -1,12 +1,14 @@
 from graphrl import graphrl
+import torch
 
 
 def test_mvc_terminate():
     prob = graphrl.MVCProblem()
 
-    features = [0, 0, 0, 0]
-    adjacency = [[2], [3], [0, 3], [1, 2]]
-    weights = [[1] * 4] * 4
+    features = torch.tensor([0., 0, 0, 0])
+    adjacency = torch.tensor(
+        [[0., 0, 1, 0], [0, 0, 0, 1], [1, 0, 0, 1], [0, 1, 1, 0]])
+    weights = torch.tensor([[1.] * 4] * 4) * adjacency
 
     g = graphrl.Graph(features, adjacency, weights)
     s = graphrl.State(g)
@@ -23,9 +25,10 @@ def test_mvc_terminate():
 def test_mvc_reward():
     prob = graphrl.MVCProblem()
 
-    features = [0, 0, 0, 0]
-    adjacency = [[2], [3], [0, 3], [1, 2]]
-    weights = [[1] * 4] * 4
+    features = torch.tensor([0., 0, 0, 0])
+    adjacency = torch.tensor(
+        [[0., 0, 1, 0], [0, 0, 0, 1], [1, 0, 0, 1], [0, 1, 1, 0]])
+    weights = torch.tensor([[1.] * 4] * 4) * adjacency
 
     g = graphrl.Graph(features, adjacency, weights)
     s = graphrl.State(g)
@@ -41,9 +44,10 @@ def test_mvc_reward():
 
 
 def test_state_substate():
-    features = [0, 0, 0, 0]
-    adjacency = [[2], [3], [0, 3], [1, 2]]
-    weights = [[1] * 4] * 4
+    features = torch.tensor([0., 0, 0, 0])
+    adjacency = torch.tensor(
+        [[0., 0, 1, 0], [0, 0, 0, 1], [1, 0, 0, 1], [0, 1, 1, 0]])
+    weights = torch.tensor([[1.] * 4] * 4) * adjacency
 
     g = graphrl.Graph(features, adjacency, weights)
     s = graphrl.State(g)
@@ -62,6 +66,10 @@ def test_state_substate():
     assert s.substate_at_step(1) == graphrl.State(g).add_node(0)
     assert s.substate_at_step(1) != graphrl.State(g).add_node(2)
     assert s.substate_at_step(2) == graphrl.State(g).add_node(0).add_node(2)
+    i = 0
+    for _ in s.substate_at_step(1):
+        i += 1
+    assert i == 1
 
 
 def test_replaymem():

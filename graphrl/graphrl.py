@@ -2,6 +2,7 @@ import copy
 import random
 import collections
 from bitarray import bitarray
+import torch
 
 
 class Problem:
@@ -15,13 +16,11 @@ class Problem:
 class MVCProblem(Problem):
     def terminate(self, graph, state):
         adjacency = graph.adjacency
-        adjacency = [x[:] for x in adjacency]
+        adjacency = adjacency.clone()
         for sel in state:
-            torm = adjacency[sel]
-            adjacency[sel] = []
-            for opp in torm:
-                del adjacency[opp][adjacency[opp].index(sel)]
-        return not any(adjacency)
+            adjacency[sel, :].fill_(0)
+            adjacency[:, sel].fill_(0)
+        return not torch.any(torch.eq(adjacency, 1))
 
     def reward(self, graph, state, action):
         return -1
@@ -29,8 +28,9 @@ class MVCProblem(Problem):
 
 class Graph:
     def __init__(self, features, adjacency, weights):
-        assert len(features) == len(adjacency)
-        assert len(features) == len(weights)
+        assert features.size(0) == adjacency.size(0)
+        assert adjacency.size(0) == adjacency.size(1)
+        assert adjacency.size() == weights.size()
         self.features = features
         self.adjacency = adjacency
         self.weights = weights
@@ -45,10 +45,12 @@ class Graph:
         return self.features[node]
 
     def __len__(self):
-        return len(self.features)
+        return self.features.size(0)
 
     def __eq__(self, val):
-        return self.features == val.features and self.adjacency == val.adjacency and self.weights == val.weights
+        return torch.all(torch.eq(self.features, val.features)) \
+           and torch.all(torch.eq(self.adjacency, val.adjacency)) \
+           and torch.all(torch.eq(self.weights, val.weights))
 
 
 class State:
