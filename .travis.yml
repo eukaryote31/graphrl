@@ -1,0 +1,9 @@
+language: python
+python:
+  - "3.6"
+install:
+  - pipenv install -e .
+script:
+  - pipenv run coverage run --source=graphrl setup.py test
+after_success:
+  - coveralls
