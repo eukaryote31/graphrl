@@ -37,6 +37,8 @@ class GraphEmbedder(nn.Module):
 
             newembeds = F.relu(v_selected + v_weights + v_priors)
 
+            print(newembeds.shape)
+
             embeddings = newembeds
 
         sumembed = torch.sum(embeddings, dim=0)
@@ -44,6 +46,6 @@ class GraphEmbedder(nn.Module):
         sumembed = sumembed.reshape(1, embedsize).expand(len(graph), embedsize)
         peract = self.w_q_action(embeddings)
         q_vals = torch.cat((sumembed, peract), dim=1)
-        q_vals = self.w_q_reduc(q_vals)
+        q_vals = self.w_q_reduc(q_vals)[:, 0]
 
         return q_vals, embeddings

@@ -84,6 +84,8 @@ def test_pick_random_node():
     g = graphrl.Graph(features, adjacency, weights)
     s = graphrl.State(g)
 
+    for _ in range(100):
+        assert s.pick_random_node() < 4
     s.add_node(0)
     s.add_node(2)
     s.add_node(3)
