@@ -80,8 +80,9 @@ class State:
     def pick_random_node(self):
         self._resolve_view()
         num_nodes = len(self.graph) - len(self.state)
-        assert num_nodes > 0
-        pos = random.randint(0, num_nodes - 1)
+        if num_nodes <= 0:
+            raise IndexError()
+        pos = random.randrange(0, num_nodes)
         for i, e in enumerate(self.inv_state):
             if e:
                 if pos == 0:

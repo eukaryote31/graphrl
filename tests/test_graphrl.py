@@ -1,5 +1,6 @@
 from graphrl import graphrl
 import torch
+import pytest
 
 
 def test_mvc_terminate():
@@ -20,6 +21,8 @@ def test_mvc_terminate():
     s.add_node(3)
 
     assert prob.terminate(g, s)
+
+    assert not prob.terminate(g, s.substate_at_step(1))
 
 
 def test_mvc_reward():
@@ -70,6 +73,25 @@ def test_state_substate():
     for _ in s.substate_at_step(1):
         i += 1
     assert i == 1
+
+
+def test_pick_random_node():
+    features = torch.tensor([0., 0, 0, 0])
+    adjacency = torch.tensor(
+        [[0., 0, 1, 0], [0, 0, 0, 1], [1, 0, 0, 1], [0, 1, 1, 0]])
+    weights = torch.tensor([[1.] * 4] * 4) * adjacency
+
+    g = graphrl.Graph(features, adjacency, weights)
+    s = graphrl.State(g)
+
+    s.add_node(0)
+    s.add_node(2)
+    s.add_node(3)
+
+    assert s.pick_random_node() == 1
+    s.add_node(1)
+    with pytest.raises(IndexError):
+        s.pick_random_node()
 
 
 def test_replaymem():
