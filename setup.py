@@ -7,7 +7,8 @@ setup(
     packages=find_packages(exclude=['contrib', 'docs', 'tests']),
     setup_requires=[
         'pytest-runner',
-        'coveralls'
+        'coveralls',
+        'coverage'
     ],
     install_requires=[
         'bitarray',
