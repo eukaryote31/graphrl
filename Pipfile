@@ -6,6 +6,7 @@ name = "pypi"
 [packages]
 graphrl = {editable = true, path = "."}
 coverage = "*"
+coveralls = "*"
 
 [dev-packages]
 
