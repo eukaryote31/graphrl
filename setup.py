@@ -12,6 +12,7 @@ setup(
         'bitarray',
         'torch==0.4.1',
         'numpy',
+        'networkx'
     ],
     tests_require=[
         'pytest'

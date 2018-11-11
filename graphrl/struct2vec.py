@@ -37,8 +37,6 @@ class GraphEmbedder(nn.Module):
 
             newembeds = F.relu(v_selected + v_weights + v_priors)
 
-            print(newembeds.shape)
-
             embeddings = newembeds
 
         sumembed = torch.sum(embeddings, dim=0)
