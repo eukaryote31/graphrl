@@ -75,6 +75,25 @@ def test_state_substate():
     assert i == 1
 
 
+def test_view_resolution():
+    features = torch.tensor([0., 0, 0, 0])
+    adjacency = torch.tensor(
+        [[0., 0, 1, 0], [0, 0, 0, 1], [1, 0, 0, 1], [0, 1, 1, 0]])
+    weights = torch.tensor([[1.] * 4] * 4) * adjacency
+
+    g = graphrl.Graph(features, adjacency, weights)
+    s = graphrl.State(g)
+
+    s.add_node(0)
+    s.add_node(2)
+    s.add_node(3)
+    s.add_node(1)
+
+    s1 = s.substate_at_step(1)
+    assert s == s1.add_node(2).add_node(3).add_node(1)
+
+
+
 def test_pick_random_node():
     features = torch.tensor([0., 0, 0, 0])
     adjacency = torch.tensor(

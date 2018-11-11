@@ -115,7 +115,7 @@ class State:
             for i in self.state[self.nsteps:]:
                 self.inv_state[i] = 1
             self.state = self.state[:self.nsteps]
-            self.nsteps = 0
+            self.nsteps = None
 
     def __getitem__(self, key):
         if self.nsteps is not None:
