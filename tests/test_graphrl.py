@@ -1,4 +1,4 @@
-from graphrl import graphrl
+from graphrl import graphrl, graphgen
 import torch
 import pytest
 
@@ -6,111 +6,94 @@ import pytest
 def test_mvc_terminate():
     prob = graphrl.MVCProblem()
 
-    features = torch.tensor([0., 0, 0, 0])
-    adjacency = torch.tensor(
-        [[0., 0, 1, 0], [0, 0, 0, 1], [1, 0, 0, 1], [0, 1, 1, 0]])
-    weights = torch.tensor([[1.] * 4] * 4) * adjacency
+    g = graphgen.ToyGraphDistribution().sample_graph()
+    s = graphrl.Solution(g)
 
-    g = graphrl.Graph(features, adjacency, weights)
-    s = graphrl.State(g)
+    s = s.add_node(0)
 
-    s.add_node(0)
+    assert not prob.terminate(s)
 
-    assert not prob.terminate(g, s)
+    s = s.add_node(3)
 
-    s.add_node(3)
+    assert prob.terminate(s)
 
-    assert prob.terminate(g, s)
-
-    assert not prob.terminate(g, s.substate_at_step(1))
+    assert not prob.terminate(s.subsolution_at_step(1))
 
 
 def test_mvc_reward():
     prob = graphrl.MVCProblem()
 
-    features = torch.tensor([0., 0, 0, 0])
-    adjacency = torch.tensor(
-        [[0., 0, 1, 0], [0, 0, 0, 1], [1, 0, 0, 1], [0, 1, 1, 0]])
-    weights = torch.tensor([[1.] * 4] * 4) * adjacency
+    g = graphgen.ToyGraphDistribution().sample_graph()
+    s = graphrl.Solution(g)
 
-    g = graphrl.Graph(features, adjacency, weights)
-    s = graphrl.State(g)
+    s = s.add_node(0)
 
-    s.add_node(0)
+    assert prob.cost(s) == -1
 
-    assert prob.reward(g, s, 3) == -1
+    s = s.add_node(3)
+    s = s.add_node(2)
 
-    s.add_node(3)
-    s.add_node(2)
-
-    assert prob.cumul_reward(g, s, 0, 3) == -3
+    assert prob.cumul_reward(s, 0, 3) == -3
 
 
-def test_state_substate():
-    features = torch.tensor([0., 0, 0, 0])
-    adjacency = torch.tensor(
-        [[0., 0, 1, 0], [0, 0, 0, 1], [1, 0, 0, 1], [0, 1, 1, 0]])
-    weights = torch.tensor([[1.] * 4] * 4) * adjacency
+def test_solution_subsolution():
+    g = graphgen.ToyGraphDistribution().sample_graph()
+    s = graphrl.Solution(g)
 
-    g = graphrl.Graph(features, adjacency, weights)
-    s = graphrl.State(g)
+    s = s.add_node(0)
+    s_at1 = s
+    s = s.add_node(2)
+    s_at2 = s
+    s = s.add_node(3)
+    s = s.add_node(1)
 
-    s.add_node(0)
-    s.add_node(2)
-    s.add_node(3)
-    s.add_node(1)
-
-    s2 = graphrl.State(g)
-    s2.add_node(0)
+    s2 = graphrl.Solution(g)
+    s2 = s2.add_node(0)
 
     assert s == s
     assert g == g
-    assert s.substate_at_step(0) == graphrl.State(g)
-    assert s.substate_at_step(1) == graphrl.State(g).add_node(0)
-    assert s.substate_at_step(1) != graphrl.State(g).add_node(2)
-    assert s.substate_at_step(2) == graphrl.State(g).add_node(0).add_node(2)
+    assert s_at1 == s2
+    assert s_at2 != s2
+    assert s_at1 != s
+    assert s_at2 != s
+    assert s_at1 == s.subsolution_at_step(1)
+    assert s_at2 == s.subsolution_at_step(2)
+    assert s_at1 != s.subsolution_at_step(2)
+    assert s.subsolution_at_step(0) == graphrl.Solution(g)
+    assert s.subsolution_at_step(1) == graphrl.Solution(g).add_node(0)
+    assert s.subsolution_at_step(1) != graphrl.Solution(g).add_node(2)
+    assert s.subsolution_at_step(2) == graphrl.Solution(g).add_node(0).add_node(2)
     i = 0
-    for _ in s.substate_at_step(1):
+    for _ in s.subsolution_at_step(1):
         i += 1
     assert i == 1
 
 
 def test_view_resolution():
-    features = torch.tensor([0., 0, 0, 0])
-    adjacency = torch.tensor(
-        [[0., 0, 1, 0], [0, 0, 0, 1], [1, 0, 0, 1], [0, 1, 1, 0]])
-    weights = torch.tensor([[1.] * 4] * 4) * adjacency
+    g = graphgen.ToyGraphDistribution().sample_graph()
+    s = graphrl.Solution(g)
 
-    g = graphrl.Graph(features, adjacency, weights)
-    s = graphrl.State(g)
+    s = s.add_node(0)
+    s = s.add_node(2)
+    s = s.add_node(3)
+    s = s.add_node(1)
 
-    s.add_node(0)
-    s.add_node(2)
-    s.add_node(3)
-    s.add_node(1)
-
-    s1 = s.substate_at_step(1)
+    s1 = s.subsolution_at_step(1)
     assert s == s1.add_node(2).add_node(3).add_node(1)
 
 
-
 def test_pick_random_node():
-    features = torch.tensor([0., 0, 0, 0])
-    adjacency = torch.tensor(
-        [[0., 0, 1, 0], [0, 0, 0, 1], [1, 0, 0, 1], [0, 1, 1, 0]])
-    weights = torch.tensor([[1.] * 4] * 4) * adjacency
-
-    g = graphrl.Graph(features, adjacency, weights)
-    s = graphrl.State(g)
+    g = graphgen.ToyGraphDistribution().sample_graph()
+    s = graphrl.Solution(g)
 
     for _ in range(100):
         assert s.pick_random_node() < 4
-    s.add_node(0)
-    s.add_node(2)
-    s.add_node(3)
+    s = s.add_node(0)
+    s = s.add_node(2)
+    s = s.add_node(3)
 
     assert s.pick_random_node() == 1
-    s.add_node(1)
+    s = s.add_node(1)
     with pytest.raises(IndexError):
         s.pick_random_node()
 

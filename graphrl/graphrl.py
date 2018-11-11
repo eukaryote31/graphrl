@@ -3,125 +3,133 @@ import random
 import collections
 from bitarray import bitarray
 import torch
+import torch.nn.functional as F
 
 
 class Problem:
-    def cumul_reward(self, graph, state, fr, to):
-        cumul = 0
-        for i in range(fr, to):
-            cumul += self.reward(graph, state.substate_at_step(i), state[i])
-        return cumul
+    def cumul_reward(self, solution, fr, to):
+        return self.cost(solution.subsolution_at_step(to)) - self.cost(solution.subsolution_at_step(fr))
 
 
 class MVCProblem(Problem):
-    def terminate(self, graph, state):
-        adjacency = graph.adjacency
-        adjacency = adjacency.clone()
-        for sel in state:
+    def terminate(self, solution):
+        adjacency = solution.adjacency().clone()
+        for sel in solution:
             adjacency[sel, :].fill_(0)
             adjacency[:, sel].fill_(0)
         return not torch.any(torch.eq(adjacency, 1))
 
-    def reward(self, graph, state, action):
-        return -1
+    def cost(self, solution):
+        return -len(solution)
 
 
 class Graph:
-    def __init__(self, features, adjacency, weights):
-        assert features.size(0) == adjacency.size(0)
+    def __init__(self, adjacency, weights):
         assert adjacency.size(0) == adjacency.size(1)
         assert adjacency.size() == weights.size()
-        self.features = features
         self.adjacency = adjacency
         self.weights = weights
 
-    def adjacent_nodes(self, node):
-        return self.adjacency[node]
-
-    def node_weight(self, node):
-        return self.weights[node]
-
-    def node_features(self, node):
-        return self.features[node]
-
     def __len__(self):
-        return self.features.size(0)
+        return self.adjacency.size(0)
 
     def __eq__(self, val):
-        return torch.all(torch.eq(self.features, val.features)) \
-           and torch.all(torch.eq(self.adjacency, val.adjacency)) \
-           and torch.all(torch.eq(self.weights, val.weights))
+        return torch.equal(self.adjacency, val.adjacency) and torch.equal(self.weights, val.weights)
 
 
-class State:
-    def __init__(self, graph, state=None, inv_state=None, n_steps=None):
+class Solution:
+    def __init__(self, graph: Graph, solution=None,
+                 n_steps=None, featurevec=None):
         self.graph = graph
-        self.state = state if state else []
+        self.featurevec = featurevec
+        self.solution = [] if solution is None else solution
         self.nsteps = n_steps
-        self.inv_state = inv_state
-        if not inv_state:
-            self.inv_state = bitarray(len(graph))
-            for i in range(len(graph)):
-                self.inv_state[i] = 1
-            for i in self.state:
-                self.inv_state[i] = 0
+        if featurevec is None:
+            self.featurevec = torch.zeros(len(graph))
+            for i in self.solution:
+                self.featurevec[i] = 1
 
     def add_node(self, nodeidx):
         self._resolve_view()
-        self.state.append(nodeidx)
-        self.inv_state[nodeidx] = 0
-        return self
+        self.nsteps = len(self.solution)
+        self.solution.append(nodeidx)
+        self.featurevec[nodeidx] = len(self.solution)
+        return Solution(self.graph, self.solution, None, self.featurevec)
+
+    def adjacency(self, pad=None):
+        if pad:
+            assert pad >= len(self.graph)
+            return F.pad(self.graph.adjacency, (0, pad - len(self.graph), 0, pad - len(self.graph)))
+        else:
+            return self.graph.adjacency
+
+    def weights(self, pad=None):
+        if pad:
+            assert pad >= len(self.graph)
+            return F.pad(self.graph.adjacency, (0, pad - len(self.graph), 0, pad - len(self.graph)))
+        else:
+            return self.graph.weights
+
+    def features(self, pad=None):
+        if self.nsteps is None:
+            f = self.featurevec != 0
+        else:
+            f = self.featurevec <= self.nsteps and self.featurevec != 0
+
+        if pad:
+            assert pad >= len(self.graph)
+            return F.pad(f.float(), (0, pad - len(self.graph)))
+        else:
+            return f
 
     def nodes_included(self):
         if self.nsteps is not None:
-            return self.state[:self.nsteps]
-        return self.state
+            return self.solution[:self.nsteps]
+        return self.solution
 
     def pick_random_node(self):
         self._resolve_view()
-        num_nodes = len(self.graph) - len(self.state)
+        num_nodes = len(self.graph) - len(self.solution)
         if num_nodes <= 0:
             raise IndexError()
         pos = random.randrange(0, num_nodes)
-        for i, e in enumerate(self.inv_state):
-            if e:
+        for i, e in enumerate(self.featurevec):
+            if not e:
                 if pos == 0:
                     return i
                 else:
                     pos -= 1
 
-        raise Error('inconsistent state!')
-
     def __contains__(self, node):
-        return not self.inv_state[node]
+        return bool(self.featurevec[node])
 
     def __len__(self):
         if self.nsteps is not None:
             return self.nsteps
         else:
-            return len(self.state)
+            return len(self.solution)
 
     def __iter__(self):
-        return StateIter(self)
+        return SolutionIter(self)
 
     def __str__(self):
-        return str(self.state[:self.nsteps] if self.nsteps else self.state)
+        return str(self.solution[:self.nsteps] if self.nsteps else self.solution)
 
     def _resolve_view(self):
         if self.nsteps is not None:
             # resolve view by making copy of data
-            self.inv_state = self.inv_state.copy()
+            self.featurevec = self.featurevec.clone()
 
-            for i in self.state[self.nsteps:]:
-                self.inv_state[i] = 1
-            self.state = self.state[:self.nsteps]
+            for i in self.solution[self.nsteps:]:
+                self.featurevec[i] = 0
+            self.solution = self.solution[:self.nsteps]
             self.nsteps = None
 
     def __getitem__(self, key):
         if self.nsteps is not None:
             if key >= self.nsteps:
                 raise IndexError
-        return self.state[key]
+        return self.solution[key]
 
     def __eq__(self, val):
         try:
@@ -131,7 +139,7 @@ class State:
             if self.graph != val.graph:
                 return False
 
-            if self.state is val.state and self.nsteps == val.nsteps:
+            if self.solution is val.solution and self.nsteps == val.nsteps:
                 return True
 
             for i in range(len(self)):
@@ -142,21 +150,21 @@ class State:
         except TypeError:
             return False
 
-    def substate_at_step(self, step):
-        return State(self.graph, self.state, self.inv_state, step)
+    def subsolution_at_step(self, step):
+        return Solution(self.graph, self.solution, step, self.featurevec)
 
 
-class StateIter:
-    def __init__(self, state):
-        self.state = state
+class SolutionIter:
+    def __init__(self, solution):
+        self.solution = solution
         self.i = 0
 
     def __iter__(self):
         return self
 
     def __next__(self):
-        if self.i < len(self.state):
-            r = self.state.state[self.i]
+        if self.i < len(self.solution):
+            r = self.solution.solution[self.i]
             self.i += 1
             return r
         else:
@@ -172,12 +180,12 @@ class ReplayMemory:
         self.arr = []
         self.index = 0
 
-    def add(self, state):
+    def add(self, solution):
         if len(self.arr) < self.capacity:
-            self.arr.append(state)
+            self.arr.append(solution)
             self.index = len(self.arr) % self.capacity
         else:
-            self.arr[self.index] = state
+            self.arr[self.index] = solution
             self.index = (self.index + 1) % self.capacity
 
     def sample(self, batchsize):

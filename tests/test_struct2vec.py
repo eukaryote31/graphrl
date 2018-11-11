@@ -1,15 +1,24 @@
 import torch
-from graphrl import struct2vec, graphrl
+from graphrl import struct2vec, graphrl, graphgen
 
 
 def test_s2v_sanity():
-    features = torch.tensor([0., 0, 0, 0])
-    adjacency = torch.tensor([[0., 0, 1, 0], [0, 0, 0, 1], [1, 0, 0, 1], [0, 1, 1, 0]])
-    weights = torch.tensor([[1.] * 4] * 4) * adjacency
-
-    g = graphrl.Graph(features, adjacency, weights)
+    g = graphgen.ToyGraphDistribution().sample_graph()
+    s = graphrl.Solution(g)
 
     ge = struct2vec.GraphEmbedder()
-    qvs, embs = ge(g)
-    assert qvs.size() == torch.Size((4, ))
-    assert embs.size() == torch.Size((4, 10))
+    qvs, embs = ge([s])
+    assert qvs.size() == torch.Size((1, 4))
+    assert embs.size() == torch.Size((1, 4, 10))
+
+
+def test_s2v_multi():
+    ge = struct2vec.GraphEmbedder()
+    gen = graphgen.ErdosRenyiDistribution()
+
+    gs = []
+    for _ in range(5):
+        gs.append(graphrl.Solution(gen.sample_graph(12)))
+    qvs, embs = ge(gs)
+    assert qvs.size() == torch.Size((5, 12))
+    assert embs.size() == torch.Size((5, 12, 10))
