@@ -1,7 +1,6 @@
 import copy
 import random
 import collections
-from bitarray import bitarray
 import torch
 import torch.nn.functional as F
 
@@ -9,6 +8,12 @@ import torch.nn.functional as F
 class Problem:
     def cumul_reward(self, solution, fr, to):
         return self.cost(solution.subsolution_at_step(to)) - self.cost(solution.subsolution_at_step(fr))
+
+    def terminate(self, solution):
+        raise NotImplementedError
+
+    def cost(self, solution):
+        return -float(len(solution))
 
 
 class MVCProblem(Problem):
@@ -50,6 +55,8 @@ class Solution:
                 self.featurevec[i] = 1
 
     def add_node(self, nodeidx):
+        assert 0 <= nodeidx and nodeidx < len(self.graph)
+        assert self.featurevec[nodeidx] == 0
         self._resolve_view()
         self.nsteps = len(self.solution)
         self.solution.append(nodeidx)
@@ -74,7 +81,7 @@ class Solution:
         if self.nsteps is None:
             f = self.featurevec != 0
         else:
-            f = self.featurevec <= self.nsteps and self.featurevec != 0
+            f = (self.featurevec <= self.nsteps) * (self.featurevec != 0)
 
         if pad:
             assert pad >= len(self.graph)
@@ -99,6 +106,19 @@ class Solution:
                     return i
                 else:
                     pos -= 1
+        assert False
+
+    def pick_node(self, embedder, epsilon):
+        if random.random() < epsilon:
+            return self.pick_random_node()
+        else:
+            qs, embs = embedder([self])
+            qs = qs[0][:len(self.graph)]
+            # mask out illegal choices
+            qs += torch.tensor(-999999999.) * self.features().float()
+            vals, inds = qs.max(0)
+            assert vals > -99999999
+            return int(inds)
 
     def __contains__(self, node):
         return bool(self.featurevec[node])

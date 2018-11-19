@@ -9,7 +9,6 @@ setup(
         'pytest-runner'
     ],
     install_requires=[
-        'bitarray',
         'torch==0.4.1',
         'numpy',
         'networkx'
