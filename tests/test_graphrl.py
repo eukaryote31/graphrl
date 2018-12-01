@@ -1,6 +1,7 @@
 from graphrl import graphrl, graphgen
 import torch
 import pytest
+from unittest.mock import MagicMock
 
 
 def test_mvc_terminate():
@@ -14,8 +15,20 @@ def test_mvc_terminate():
     assert not prob.terminate(s)
 
     s = s.add_node(3)
+    s = s.add_node(4)
+
+    assert not prob.terminate(s)
+
+    s = s.add_node(6)
 
     assert prob.terminate(s)
+
+    s = s.add_node(7)
+
+    assert prob.terminate(s)
+
+    assert prob.terminate(s.subsolution_at_step(4))
+    assert not prob.terminate(s.subsolution_at_step(3))
 
     assert not prob.terminate(s.subsolution_at_step(1))
 
@@ -62,7 +75,8 @@ def test_solution_subsolution():
     assert s.subsolution_at_step(0) == graphrl.Solution(g)
     assert s.subsolution_at_step(1) == graphrl.Solution(g).add_node(0)
     assert s.subsolution_at_step(1) != graphrl.Solution(g).add_node(2)
-    assert s.subsolution_at_step(2) == graphrl.Solution(g).add_node(0).add_node(2)
+    assert s.subsolution_at_step(2) == graphrl.Solution(
+        g).add_node(0).add_node(2)
     i = 0
     for _ in s.subsolution_at_step(1):
         i += 1
@@ -87,15 +101,43 @@ def test_pick_random_node():
     s = graphrl.Solution(g)
 
     for _ in range(100):
-        assert s.pick_random_node() < 4
+        assert s.pick_random_node() < len(g)
     s = s.add_node(0)
     s = s.add_node(2)
     s = s.add_node(3)
+    s = s.add_node(4)
+    s = s.add_node(5)
+    s = s.add_node(6)
+    s = s.add_node(7)
 
     assert s.pick_random_node() == 1
     s = s.add_node(1)
     with pytest.raises(IndexError):
         s.pick_random_node()
+
+
+def test_solution_pick_node():
+    g = graphgen.ToyGraphDistribution().sample_graph()
+    s = graphrl.Solution(g)
+
+    emb = MagicMock(return_value=(torch.tensor(
+        [[0, 3, 0, 0, 1, 0, 2, 0]], dtype=torch.get_default_dtype()), None))
+    assert s.pick_node(emb, 0) == 1
+    s = s.add_node(1)
+    assert s.pick_node(emb, 0) == 6
+    s = s.add_node(6)
+    assert s.pick_node(emb, 0) == 4
+    s = s.add_node(4)
+    assert s.pick_node(emb, 0) == 0
+    s = s.add_node(0)
+    assert s.pick_node(emb, 0) == 2
+    s = s.add_node(2)
+    assert s.pick_node(emb, 0) == 3
+    s = s.add_node(3)
+    s = s.add_node(5)
+    s = s.add_node(7)
+    with pytest.raises(IndexError):
+        s.pick_node(emb, 0)
 
 
 def test_replaymem():

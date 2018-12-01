@@ -32,9 +32,10 @@ def init_weights(m):
 
 class GraphEmbedder(nn.Module):
     def __init__(self,
+                 device='cpu',
                  iters=5,
                  embedsize=10,
-                 discountfactor=1
+                 discountfactor=1,
                  ):
         super(GraphEmbedder, self).__init__()
         self.iters = iters
@@ -47,7 +48,11 @@ class GraphEmbedder(nn.Module):
         self.w_nbweights_ew = nn.Linear(1, embedsize, bias=False)
         self.w_q_reduc = nn.Linear(2 * embedsize, 1, bias=False)
         self.w_q_allembed = nn.Linear(embedsize, embedsize, bias=False)
+#        self.w_q_allembed2 = nn.Linear(embedsize, embedsize, bias=False)
         self.w_q_action = nn.Linear(embedsize, embedsize, bias=False)
+#        self.w_q_action2 = nn.Linear(embedsize, embedsize, bias=False)
+
+        self.dev = device
 
         self.apply(init_weights)
 
@@ -55,14 +60,15 @@ class GraphEmbedder(nn.Module):
         graphsize = max([len(s.graph) for s in sols])
         batchsize = len(sols)
         embedsize = self.embedsize
-        embeddings = torch.zeros(batchsize, graphsize, embedsize)
+        embeddings = torch.zeros(batchsize, graphsize,
+                                 embedsize, device=self.dev)
 
-        weights = torch.stack([s.weights(graphsize) for s in sols])
-        adjacency = torch.stack([s.adjacency(graphsize) for s in sols])
-        features = torch.stack([s.features(graphsize) for s in sols])
+        weights = torch.stack([s.weights(graphsize) for s in sols]).to(self.dev)
+        adjacency = torch.stack([s.adjacency(graphsize) for s in sols]).to(self.dev)
+        features = torch.stack([s.features(graphsize) for s in sols]).to(self.dev)
 
         v_selected = self.w_selected(features.reshape(batchsize, -1, 1))
-        weights = F.leaky_relu(self.w_nbweights_ew(
+        weights = F.relu(self.w_nbweights_ew(
             weights.reshape(batchsize, graphsize, graphsize, 1)))
         v_weights = self.w_nbweights(torch.sum(weights, dim=1))
 
@@ -70,15 +76,19 @@ class GraphEmbedder(nn.Module):
         for t in range(self.iters):
             v_priors = torch.bmm(adjacency, embeddings)
             v_priors = self.w_nbpriors(v_priors)
-            newembeds = F.leaky_relu(v_selected + v_weights + v_priors)
+            newembeds = F.relu(v_selected + v_weights + v_priors)
 
             embeddings = newembeds
 
         sumembed = torch.sum(embeddings, dim=1)
         sumembed = self.w_q_allembed(sumembed)
+#        sumembed = F.relu(sumembed)
+#        sumembed = self.w_q_allembed2(sumembed)
         sumembed = sumembed.reshape(batchsize, 1, embedsize).expand(
             batchsize, graphsize, embedsize)
         peract = self.w_q_action(embeddings)
+#        peract = F.relu(peract)
+#        peract = self.w_q_action2(peract)
         q_vals = torch.cat((sumembed, peract), dim=2)
         q_vals = self.w_q_reduc(q_vals)[:, :, 0]
 
@@ -89,8 +99,12 @@ class GraphEmbedder(nn.Module):
         batchsize = len(cases)
         sols0 = [x.solution0 for x in cases]
         sols1 = [x.solution1 for x in cases]
+        verts0 = [x.nextvertex for x in cases]
         qvs, _ = self(sols0 + sols1)
         qvs0, qvs1 = qvs[:batchsize], qvs[batchsize:]
+        qvs1 = qvs1.detach()
+
+#        print((qvs0 - qvs1).mean())
 
         expectedq1, _ = qvs1.max(dim=1)
 
@@ -101,19 +115,16 @@ class GraphEmbedder(nn.Module):
         expectedq1 *= self.discountfactor
 
         er = [problem.cumul_reward(s1, len(s0), len(s1)) for s0, s1 in zip(sols0, sols1)]
-        empiricalreward = torch.tensor(er, dtype=torch.get_default_dtype())
+        empiricalreward = torch.tensor(er, dtype=torch.get_default_dtype(), device=self.dev)
 
         expectedq1 = expectedq1.clamp(*q_clamp)
         target = empiricalreward + expectedq1
 #        print(empiricalreward)
 
-        orig_qvals = qvs0[torch.arange(batchsize), [x.nextvertex for x in cases]]
+        qvs0 = qvs0[torch.arange(batchsize), verts0]
+#        print(empiricalreward)
 
-        # check to make sure it really works
-        for i in range(batchsize):
-            assert qvs0[i, cases[i].nextvertex] == orig_qvals[i]
-
-        loss = F.mse_loss(orig_qvals, target)
+        loss = F.mse_loss(qvs0, target)
 
 #        print(('%.5f' % (loss, )).rjust(15), qvs1.mean())
 

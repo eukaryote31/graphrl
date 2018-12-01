@@ -13,8 +13,7 @@ class Problem:
         raise NotImplementedError
 
     def cost(self, solution):
-        return -float(len(solution))
-
+        raise NotImplementedError
 
 class MVCProblem(Problem):
     def terminate(self, solution):
@@ -25,57 +24,80 @@ class MVCProblem(Problem):
         return not torch.any(torch.eq(adjacency, 1))
 
     def cost(self, solution):
-        return -len(solution)
+        return -float(len(solution))
 
 
 class Graph:
     def __init__(self, adjacency, weights):
         assert adjacency.size(0) == adjacency.size(1)
         assert adjacency.size() == weights.size()
-        self.adjacency = adjacency
-        self.weights = weights
+        self._adjacency = adjacency
+        self._weights = weights
+        self.adjcache = {}
+        self.wtcache = {}
+
+    def adjacency(self, pad=None):
+        if pad in self.adjcache:
+            return self.adjcache[pad]
+
+        if pad:
+            assert pad >= len(self)
+            ret = F.pad(self._adjacency, (0, pad - len(self), 0, pad - len(self)))
+        else:
+            ret = self._adjacency
+        self.adjcache[pad] = ret
+        return ret
+
+    def weights(self, pad=None):
+        if pad in self.wtcache:
+            return self.wtcache[pad]
+
+        if pad:
+            assert pad >= len(self)
+            ret = F.pad(self._weights, (0, pad - len(self), 0, pad - len(self)))
+        else:
+            ret = self._weights
+        self.wtcache[pad] = ret
+        return ret
 
     def __len__(self):
-        return self.adjacency.size(0)
+        return self._adjacency.size(0)
 
     def __eq__(self, val):
-        return torch.equal(self.adjacency, val.adjacency) and torch.equal(self.weights, val.weights)
+        return torch.equal(self._adjacency, val._adjacency) and torch.equal(self._weights, val._weights)
 
 
 class Solution:
     def __init__(self, graph: Graph, solution=None,
-                 n_steps=None, featurevec=None):
+                 n_steps=None, featurevec=None, device='cpu'):
+        graph._adjacency = graph._adjacency.to(device)
+        graph._weights = graph._weights.to(device)
         self.graph = graph
         self.featurevec = featurevec
         self.solution = [] if solution is None else solution
         self.nsteps = n_steps
+        self.dev = device
+
         if featurevec is None:
-            self.featurevec = torch.zeros(len(graph))
+            self.featurevec = torch.zeros(len(graph), device=device)
             for i in self.solution:
-                self.featurevec[i] = 1
+                self.featurevec[i] = 1.
 
     def add_node(self, nodeidx):
         assert 0 <= nodeidx and nodeidx < len(self.graph)
-        assert self.featurevec[nodeidx] == 0
         self._resolve_view()
+        assert self.featurevec[nodeidx] == 0
         self.nsteps = len(self.solution)
+
         self.solution.append(nodeidx)
         self.featurevec[nodeidx] = len(self.solution)
-        return Solution(self.graph, self.solution, None, self.featurevec)
+        return Solution(self.graph, self.solution, None, self.featurevec, device=self.dev)
 
     def adjacency(self, pad=None):
-        if pad:
-            assert pad >= len(self.graph)
-            return F.pad(self.graph.adjacency, (0, pad - len(self.graph), 0, pad - len(self.graph)))
-        else:
-            return self.graph.adjacency
+        return self.graph.adjacency(pad=pad)
 
     def weights(self, pad=None):
-        if pad:
-            assert pad >= len(self.graph)
-            return F.pad(self.graph.adjacency, (0, pad - len(self.graph), 0, pad - len(self.graph)))
-        else:
-            return self.graph.weights
+        return self.graph.weights(pad=pad)
 
     def features(self, pad=None):
         if self.nsteps is None:
@@ -109,15 +131,18 @@ class Solution:
         assert False
 
     def pick_node(self, embedder, epsilon):
+        if len(self) >= len(self.graph):
+            raise IndexError('Cannot pick new node! Solution is already as long as graph!')
         if random.random() < epsilon:
             return self.pick_random_node()
         else:
             qs, embs = embedder([self])
             qs = qs[0][:len(self.graph)]
             # mask out illegal choices
-            qs += torch.tensor(-999999999.) * self.features().float()
+            qs += torch.tensor(-9999999999., device=qs.device) * \
+                self.features().float()
             vals, inds = qs.max(0)
-            assert vals > -99999999
+            assert vals > -999999999
             return int(inds)
 
     def __contains__(self, node):
@@ -171,7 +196,7 @@ class Solution:
             return False
 
     def subsolution_at_step(self, step):
-        return Solution(self.graph, self.solution, step, self.featurevec)
+        return Solution(self.graph, self.solution, step, self.featurevec, device=self.dev)
 
 
 class SolutionIter:

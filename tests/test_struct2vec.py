@@ -8,8 +8,8 @@ def test_s2v_sanity():
 
     ge = struct2vec.GraphEmbedder()
     qvs, embs = ge([s])
-    assert qvs.size() == torch.Size((1, 4))
-    assert embs.size() == torch.Size((1, 4, 10))
+    assert qvs.size() == torch.Size((1, 8))
+    assert embs.size() == torch.Size((1, 8, 10))
 
 
 def test_s2v_multi():
